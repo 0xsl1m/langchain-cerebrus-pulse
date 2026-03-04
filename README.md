@@ -35,10 +35,10 @@ tools = [
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_cerebrus_pulse import CerebrusPulseTool, CerebusBundleTool, CerebrusListCoinsTool
+from langchain_cerebrus_pulse import CerebrusPulseTool, CerebrusBundleTool, CerebrusListCoinsTool
 
 llm = ChatOpenAI(model="gpt-4o")
-tools = [CerebrusListCoinsTool(), CerebrusPulseTool(), CerebusBundleTool()]
+tools = [CerebrusListCoinsTool(), CerebrusPulseTool(), CerebrusBundleTool()]
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", "You are a crypto analyst with access to real-time Hyperliquid data via Cerebrus Pulse."),
