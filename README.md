@@ -17,15 +17,23 @@ from langchain_cerebrus_pulse import (
     CerebrusFundingTool,
     CerebrusBundleTool,
     CerebrusListCoinsTool,
+    CerebrusScreenerTool,
+    CerebrusOITool,
+    CerebrusSpreadTool,
+    CerebrusCorrelationTool,
 )
 
 # Add to your agent's tools
 tools = [
-    CerebrusListCoinsTool(),   # Free
-    CerebrusPulseTool(),       # $0.02/query
-    CerebrusSentimentTool(),   # $0.01/query
-    CerebrusFundingTool(),     # $0.01/query
-    CerebrusBundleTool(),      # $0.04/query (20% discount)
+    CerebrusListCoinsTool(),      # Free
+    CerebrusPulseTool(),          # $0.02/query
+    CerebrusSentimentTool(),      # $0.01/query
+    CerebrusFundingTool(),        # $0.01/query
+    CerebrusBundleTool(),         # $0.04/query
+    CerebrusScreenerTool(),       # $0.04/query — scan all coins
+    CerebrusOITool(),             # $0.01/query
+    CerebrusSpreadTool(),         # $0.008/query
+    CerebrusCorrelationTool(),    # $0.03/query
 ]
 ```
 
@@ -62,6 +70,10 @@ print(result["output"])
 | `CerebrusSentimentTool` | $0.01 | Market sentiment (fear/greed, momentum, funding bias) |
 | `CerebrusFundingTool` | $0.01 | Funding rates with historical data |
 | `CerebrusBundleTool` | $0.04 | All data combined (20% discount) |
+| `CerebrusScreenerTool` | $0.04 | Scan 30+ coins: signals, trends, vol regime, confluence |
+| `CerebrusOITool` | $0.01 | Open interest: delta, percentile, trend, divergence |
+| `CerebrusSpreadTool` | $0.008 | Spread: slippage estimates at various sizes, liquidity score |
+| `CerebrusCorrelationTool` | $0.03 | BTC-alt correlation matrix with regime classification |
 
 ## Links
 

@@ -31,6 +31,14 @@ class BundleInput(BaseModel):
     timeframes: str = Field(default="1h,4h", description="Comma-separated: 15m, 1h, 4h")
 
 
+class ScreenerInput(BaseModel):
+    top_n: int = Field(default=30, description="Number of top coins (1-30)")
+
+
+class CoinInput(BaseModel):
+    coin: str = Field(description="Coin ticker (e.g., BTC, ETH, SOL)")
+
+
 class CerebrusListCoinsTool(BaseTool):
     name: str = "cerebrus_list_coins"
     description: str = (
@@ -109,6 +117,73 @@ class CerebrusBundleTool(BaseTool):
     def _run(self, coin: str, timeframes: str = "1h,4h") -> str:
         try:
             result = _get_client().bundle(coin, timeframes)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
+
+
+class CerebrusScreenerTool(BaseTool):
+    name: str = "cerebrus_screener"
+    description: str = (
+        "Scan all 30+ coins for top trading signals. Returns RSI, trend, "
+        "volatility regime, funding bias, confluence, and OI trend. "
+        "Cost: $0.04 USDC via x402."
+    )
+    args_schema: type[BaseModel] = ScreenerInput
+
+    def _run(self, top_n: int = 30) -> str:
+        try:
+            result = _get_client().screener(top_n)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
+
+
+class CerebrusOITool(BaseTool):
+    name: str = "cerebrus_oi"
+    description: str = (
+        "Get open interest analysis for a Hyperliquid perpetual. "
+        "Returns OI delta, percentile, trend, and price-OI divergence. "
+        "Cost: $0.01 USDC via x402."
+    )
+    args_schema: type[BaseModel] = CoinInput
+
+    def _run(self, coin: str) -> str:
+        try:
+            result = _get_client().oi(coin)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
+
+
+class CerebrusSpreadTool(BaseTool):
+    name: str = "cerebrus_spread"
+    description: str = (
+        "Get spread and liquidity analysis for a Hyperliquid perpetual. "
+        "Returns bid-ask spread, slippage at various sizes, liquidity score. "
+        "Cost: $0.008 USDC via x402."
+    )
+    args_schema: type[BaseModel] = CoinInput
+
+    def _run(self, coin: str) -> str:
+        try:
+            result = _get_client().spread(coin)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
+
+
+class CerebrusCorrelationTool(BaseTool):
+    name: str = "cerebrus_correlation"
+    description: str = (
+        "Get BTC-altcoin correlation matrix for top 15 Hyperliquid perpetuals. "
+        "Returns correlations, regime, and sector averages. "
+        "Cost: $0.03 USDC via x402."
+    )
+
+    def _run(self) -> str:
+        try:
+            result = _get_client().correlation()
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
             return json.dumps({"error": str(e)})
