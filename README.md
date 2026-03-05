@@ -1,6 +1,6 @@
 # LangChain Cerebrus Pulse
 
-LangChain tools for [Cerebrus Pulse](https://pulse.openclaw.ai) — real-time crypto intelligence for AI agents.
+LangChain tools for [Cerebrus Pulse](https://cerebruspulse.xyz) — real-time crypto intelligence for AI agents.
 
 ## Install
 
@@ -77,7 +77,7 @@ print(result["output"])
 
 ## Links
 
-- [Cerebrus Pulse Docs](https://pulse.openclaw.ai/overview)
+- [Cerebrus Pulse Docs](https://cerebruspulse.xyz/overview)
 - [Python SDK](https://github.com/0xsl1m/cerebrus-pulse-python)
 - [MCP Server](https://github.com/0xsl1m/cerebrus-pulse-mcp)
 
