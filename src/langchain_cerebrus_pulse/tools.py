@@ -187,3 +187,74 @@ class CerebrusCorrelationTool(BaseTool):
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
             return json.dumps({"error": str(e)})
+
+
+class StressInput(BaseModel):
+    limit: int = Field(default=10, description="Recent scans to analyze (1-50)")
+
+
+class CerebrusStressTool(BaseTool):
+    name: str = "cerebrus_stress"
+    description: str = (
+        "Get market stress index from cross-chain arbitrage detection across 8 chains. "
+        "Returns stress level (LOW/MODERATE/HIGH/EXTREME), score, spread statistics, "
+        "and chain routes with price dislocations. Cost: $0.015 USDC via x402."
+    )
+    args_schema: type[BaseModel] = StressInput
+
+    def _run(self, limit: int = 10) -> str:
+        try:
+            result = _get_client().stress(limit)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
+
+
+class CerebrusCexDexTool(BaseTool):
+    name: str = "cerebrus_cex_dex"
+    description: str = (
+        "Get CEX-DEX price divergence for a token. Compares Coinbase vs "
+        "Chainlink/Uniswap prices. Returns spread in bps and direction. "
+        "Cost: $0.02 USDC via x402."
+    )
+    args_schema: type[BaseModel] = CoinInput
+
+    def _run(self, coin: str) -> str:
+        try:
+            result = _get_client().cex_dex(coin)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
+
+
+class CerebrusBasisTool(BaseTool):
+    name: str = "cerebrus_basis"
+    description: str = (
+        "Get Chainlink basis analysis — Hyperliquid perp oracle vs Chainlink spot. "
+        "Returns basis in bps, direction, and contrarian signal. "
+        "Cost: $0.02 USDC via x402."
+    )
+    args_schema: type[BaseModel] = CoinInput
+
+    def _run(self, coin: str) -> str:
+        try:
+            result = _get_client().basis(coin)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
+
+
+class CerebrusDepegTool(BaseTool):
+    name: str = "cerebrus_depeg"
+    description: str = (
+        "Get USDC collateral health via Chainlink oracle. "
+        "Reports peg status, deviation, risk level, and Arbitrum sequencer status. "
+        "Cost: $0.01 USDC via x402."
+    )
+
+    def _run(self) -> str:
+        try:
+            result = _get_client().depeg()
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})

@@ -10,9 +10,13 @@ from langchain_cerebrus_pulse.tools import (
     CerebrusOITool,
     CerebrusSpreadTool,
     CerebrusCorrelationTool,
+    CerebrusStressTool,
+    CerebrusCexDexTool,
+    CerebrusBasisTool,
+    CerebrusDepegTool,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "CerebrusPulseTool",
     "CerebrusSentimentTool",
@@ -23,4 +27,8 @@ __all__ = [
     "CerebrusOITool",
     "CerebrusSpreadTool",
     "CerebrusCorrelationTool",
+    "CerebrusStressTool",
+    "CerebrusCexDexTool",
+    "CerebrusBasisTool",
+    "CerebrusDepegTool",
 ]
