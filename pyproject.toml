@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langchain-cerebrus-pulse"
-version = "0.3.1"
+version = "0.3.2"
 description = "LangChain tools for Cerebrus Pulse crypto intelligence API"
 readme = "README.md"
 license = "MIT"
