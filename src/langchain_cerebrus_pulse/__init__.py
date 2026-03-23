@@ -14,9 +14,10 @@ from langchain_cerebrus_pulse.tools import (
     CerebrusCexDexTool,
     CerebrusBasisTool,
     CerebrusDepegTool,
+    CerebrusLiquidationsTool,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __all__ = [
     "CerebrusPulseTool",
     "CerebrusSentimentTool",
@@ -31,4 +32,5 @@ __all__ = [
     "CerebrusCexDexTool",
     "CerebrusBasisTool",
     "CerebrusDepegTool",
+    "CerebrusLiquidationsTool",
 ]

@@ -258,3 +258,21 @@ class CerebrusDepegTool(BaseTool):
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
             return json.dumps({"error": str(e)})
+
+
+class CerebrusLiquidationsTool(BaseTool):
+    name: str = "cerebrus_liquidations"
+    description: str = (
+        "Get estimated liquidation heatmap for a Hyperliquid perpetual. "
+        "Maps liquidation clusters across leverage tiers (3x-50x) for longs and shorts. "
+        "Returns cascade risk, estimated USD at each zone, and nearest cluster. "
+        "Cost: $0.03 USDC via x402."
+    )
+    args_schema: type[BaseModel] = CoinInput
+
+    def _run(self, coin: str) -> str:
+        try:
+            result = _get_client().liquidations(coin)
+            return json.dumps(result.raw, indent=2)
+        except CerebrusPulseError as e:
+            return json.dumps({"error": str(e)})
