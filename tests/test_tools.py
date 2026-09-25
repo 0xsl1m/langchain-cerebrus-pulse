@@ -208,6 +208,34 @@ def test_tools_sharing_a_client_share_its_budget():
     assert client.spent_usd == Decimal("0.025")
 
 
+def test_parallel_tool_calls_stay_inside_the_shared_budget():
+    # create_agent's ToolNode runs one message's tool calls in parallel threads.
+    agents = pytest.importorskip("langchain.agents")
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    class ScriptedModel(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+    calls = [{"name": "cerebrus_pulse", "args": {"coin": "BTC"}, "id": f"call_{i}"}
+             for i in range(6)]
+    model = ScriptedModel(messages=iter([
+        AIMessage(content="", tool_calls=calls), AIMessage(content="done")]))
+    api = FakeAPI({"coin": "BTC", "timeframes": {}})
+    client = client_for(api, wallet_key=DUMMY_KEY, max_spend_usd="0.05")
+
+    agent = agents.create_agent(model, tools=[CerebrusPulseTool(client=client)])
+    result = agent.invoke({"messages": [{"role": "user", "content": "Full market overview"}]})
+
+    outs = [json.loads(m.content) for m in result["messages"] if isinstance(m, ToolMessage)]
+    blocked = [o for o in outs if o.get("payment_required")]
+    assert len(outs) == 6 and len(blocked) == 4
+    assert all("CEREBRUS_MAX_SPEND_USD" in o["reason"] for o in blocked)
+    assert client.spent_usd == Decimal("0.050")
+    assert sum(1 for r in api.requests if r.headers.get("PAYMENT-SIGNATURE")) == 2
+
+
 def test_a_payment_to_an_unknown_payee_is_refused():
     api = FakeAPI(FUNDING, pay_to="0x000000000000000000000000000000000000dEaD")
     client = client_for(api, wallet_key=DUMMY_KEY)
