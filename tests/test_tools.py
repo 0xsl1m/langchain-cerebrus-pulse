@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 from cerebrus_pulse import INDICATIVE_PRICES_USD, CerebrusPulse
+from cerebrus_pulse.payment import DEFAULT_ALLOWED_PAYTO
 from langchain_core.tools import BaseTool
 
 import langchain_cerebrus_pulse as lcp
@@ -29,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TOOLS = [getattr(lcp, name) for name in lcp.__all__]
 PAID_TOOLS = [t for t in TOOLS if t is not CerebrusListCoinsTool]
 DUMMY_KEY = "0x" + "11" * 32  # obviously fake, never funded
-PAY_TO = "0xfDFB12764c76B5113153acaa2317081F4Abc2a88"
+PAY_TO = DEFAULT_ALLOWED_PAYTO  # the SDK's default payee, so a payTo change is made once
 BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
 # Real engine output for /funding (gateway service/response_examples.json).
