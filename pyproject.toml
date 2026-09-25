@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langchain-cerebrus-pulse"
-version = "0.3.2"
+version = "0.4.0"
 description = "LangChain tools for Cerebrus Pulse crypto intelligence API"
 readme = "README.md"
 license = "MIT"
@@ -24,8 +24,18 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "cerebrus-pulse>=0.1.0",
-    "langchain-core>=0.2.0",
+    # 0.4.0 parses /funding and /sentiment correctly and can pay (x402).
+    "cerebrus-pulse>=0.4.0,<0.5",
+    "langchain-core>=1.0,<2",
+]
+
+[project.optional-dependencies]
+# Let paid tools pay automatically: USDC on Base, or also on Solana.
+pay = ["cerebrus-pulse[pay]>=0.4.0,<0.5"]
+svm = ["cerebrus-pulse[pay,svm]>=0.4.0,<0.5"]
+test = [
+    "pytest>=8",
+    "langchain>=1.0,<2",  # the README agent example
 ]
 
 [project.urls]

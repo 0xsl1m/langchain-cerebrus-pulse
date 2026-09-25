@@ -8,17 +8,60 @@ from typing import Optional
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from cerebrus_pulse import CerebrusPulse
-from cerebrus_pulse.client import CerebrusPulseError
+from cerebrus_pulse import (
+    INDICATIVE_PRICES_USD,
+    CerebrusPulse,
+    CerebrusPulseError,
+    PaymentBlocked,
+    PaymentRequired,
+)
 
 
-def _get_client() -> CerebrusPulse:
-    return CerebrusPulse()
+def _cost(endpoint: str) -> str:
+    """Price text for a tool description. Indicative: the API's 402 terms decide."""
+    return (
+        f"Paid: about ${INDICATIVE_PRICES_USD[endpoint]} USDC per call via x402 "
+        "(indicative; the API's payment terms set the price)."
+    )
+
+
+def _error(e: CerebrusPulseError) -> str:
+    """Error JSON for the agent. A 402 carries the price and payee the API asked for."""
+    out: dict = {"error": str(e)}
+    if isinstance(e, PaymentRequired):
+        out["payment_required"] = True
+        if e.price_usd is not None:
+            out["price_usd"] = str(e.price_usd)
+        out["payment_terms"] = [
+            {"network": t.network, "pay_to": t.pay_to,
+             "price_usd": str(t.price_usd) if t.price_usd is not None else None}
+            for t in e.terms
+        ]
+        if isinstance(e, PaymentBlocked):
+            out["reason"] = e.reason
+    return json.dumps(out)
+
+
+class _CerebrusTool(BaseTool):
+    """Shared by every tool: the Cerebrus Pulse client to call.
+
+    Pass one client, built with a wallet, to all tools so paid tools pay
+    automatically and share one spend budget. Without one, each call uses an
+    unpaid client and paid tools return the API's payment terms.
+    """
+
+    client: Optional[CerebrusPulse] = Field(default=None, exclude=True)
+
+    def _api(self) -> CerebrusPulse:
+        return self.client if self.client is not None else CerebrusPulse()
+
+
+_TIMEFRAMES = "Comma-separated, from 5m, 15m, 1h, 4h, 1d, 1w (default 1h,4h)"
 
 
 class PulseInput(BaseModel):
     coin: str = Field(description="Coin ticker (e.g., BTC, ETH, SOL)")
-    timeframes: str = Field(default="1h,4h", description="Comma-separated: 15m, 1h, 4h")
+    timeframes: str = Field(default="1h,4h", description=_TIMEFRAMES)
 
 
 class FundingInput(BaseModel):
@@ -28,18 +71,18 @@ class FundingInput(BaseModel):
 
 class BundleInput(BaseModel):
     coin: str = Field(description="Coin ticker (e.g., BTC, ETH, SOL)")
-    timeframes: str = Field(default="1h,4h", description="Comma-separated: 15m, 1h, 4h")
+    timeframes: str = Field(default="1h,4h", description=_TIMEFRAMES)
 
 
 class ScreenerInput(BaseModel):
-    top_n: int = Field(default=30, description="Number of top coins (1-30)")
+    top_n: int = Field(default=30, description="Number of top coins (1-50)")
 
 
 class CoinInput(BaseModel):
     coin: str = Field(description="Coin ticker (e.g., BTC, ETH, SOL)")
 
 
-class CerebrusListCoinsTool(BaseTool):
+class CerebrusListCoinsTool(_CerebrusTool):
     name: str = "cerebrus_list_coins"
     description: str = (
         "List all available coins on Cerebrus Pulse. "
@@ -48,231 +91,225 @@ class CerebrusListCoinsTool(BaseTool):
 
     def _run(self) -> str:
         try:
-            coins = _get_client().coins()
+            coins = self._api().coins()
             return json.dumps({"coins": coins, "count": len(coins)})
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusPulseTool(BaseTool):
+class CerebrusPulseTool(_CerebrusTool):
     name: str = "cerebrus_pulse"
     description: str = (
         "Get multi-timeframe technical analysis for a Hyperliquid perpetual. "
         "Returns RSI, EMAs (20/50/200), ATR, Bollinger Bands, VWAP, Z-score, "
         "trend direction, confluence scoring, derivatives (funding, OI, spread), "
-        "and market regime. Cost: $0.02 USDC via x402."
+        "and market regime. " + _cost("pulse")
     )
     args_schema: type[BaseModel] = PulseInput
 
     def _run(self, coin: str, timeframes: str = "1h,4h") -> str:
         try:
-            result = _get_client().pulse(coin, timeframes)
+            result = self._api().pulse(coin, timeframes)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusSentimentTool(BaseTool):
+class CerebrusSentimentTool(_CerebrusTool):
     name: str = "cerebrus_sentiment"
     description: str = (
-        "Get aggregated crypto market sentiment. Returns overall sentiment, "
-        "fear/greed, momentum, and funding bias. Not coin-specific. "
-        "Cost: $0.01 USDC via x402."
+        "Get aggregated crypto market sentiment as a bucketed label "
+        "(very_bearish, bearish, neutral, bullish, very_bullish) with its timestamp. "
+        "Not coin-specific. " + _cost("sentiment")
     )
 
     def _run(self) -> str:
         try:
-            result = _get_client().sentiment()
+            result = self._api().sentiment()
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusFundingTool(BaseTool):
+class CerebrusFundingTool(_CerebrusTool):
     name: str = "cerebrus_funding"
     description: str = (
         "Get funding rate analysis for a Hyperliquid perpetual. "
-        "Returns current rate, annualized %, historical min/max/average. "
-        "Cost: $0.01 USDC via x402."
+        "Returns the current, average, min and max rate over the lookback window, "
+        "annualized %, and the share of positive samples. " + _cost("funding")
     )
     args_schema: type[BaseModel] = FundingInput
 
     def _run(self, coin: str, lookback_hours: int = 24) -> str:
         try:
-            result = _get_client().funding(coin, lookback_hours)
+            result = self._api().funding(coin, lookback_hours)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusBundleTool(BaseTool):
+class CerebrusBundleTool(_CerebrusTool):
     name: str = "cerebrus_bundle"
     description: str = (
         "Get complete analysis bundle: technical analysis + sentiment + funding "
-        "in one call. 20% discount vs individual endpoints. "
-        "Cost: $0.04 USDC via x402."
+        "in one call. " + _cost("bundle")
     )
     args_schema: type[BaseModel] = BundleInput
 
     def _run(self, coin: str, timeframes: str = "1h,4h") -> str:
         try:
-            result = _get_client().bundle(coin, timeframes)
+            result = self._api().bundle(coin, timeframes)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusScreenerTool(BaseTool):
+class CerebrusScreenerTool(_CerebrusTool):
     name: str = "cerebrus_screener"
     description: str = (
         "Scan all 30+ coins for top trading signals. Returns RSI, trend, "
-        "volatility regime, funding bias, confluence, and OI trend. "
-        "Cost: $0.04 USDC via x402."
+        "volatility regime, funding bias, confluence, and OI trend. " + _cost("screener")
     )
     args_schema: type[BaseModel] = ScreenerInput
 
     def _run(self, top_n: int = 30) -> str:
         try:
-            result = _get_client().screener(top_n)
+            result = self._api().screener(top_n)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusOITool(BaseTool):
+class CerebrusOITool(_CerebrusTool):
     name: str = "cerebrus_oi"
     description: str = (
         "Get open interest analysis for a Hyperliquid perpetual. "
-        "Returns OI delta, percentile, trend, and price-OI divergence. "
-        "Cost: $0.01 USDC via x402."
+        "Returns OI delta, percentile, trend, and price-OI divergence. " + _cost("oi")
     )
     args_schema: type[BaseModel] = CoinInput
 
     def _run(self, coin: str) -> str:
         try:
-            result = _get_client().oi(coin)
+            result = self._api().oi(coin)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusSpreadTool(BaseTool):
+class CerebrusSpreadTool(_CerebrusTool):
     name: str = "cerebrus_spread"
     description: str = (
         "Get spread and liquidity analysis for a Hyperliquid perpetual. "
         "Returns bid-ask spread, slippage at various sizes, liquidity score. "
-        "Cost: $0.008 USDC via x402."
+        + _cost("spread")
     )
     args_schema: type[BaseModel] = CoinInput
 
     def _run(self, coin: str) -> str:
         try:
-            result = _get_client().spread(coin)
+            result = self._api().spread(coin)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusCorrelationTool(BaseTool):
+class CerebrusCorrelationTool(_CerebrusTool):
     name: str = "cerebrus_correlation"
     description: str = (
         "Get BTC-altcoin correlation matrix for top 15 Hyperliquid perpetuals. "
-        "Returns correlations, regime, and sector averages. "
-        "Cost: $0.03 USDC via x402."
+        "Returns correlations, regime, and sector averages. " + _cost("correlation")
     )
 
     def _run(self) -> str:
         try:
-            result = _get_client().correlation()
+            result = self._api().correlation()
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
 class StressInput(BaseModel):
     limit: int = Field(default=10, description="Recent scans to analyze (1-50)")
 
 
-class CerebrusStressTool(BaseTool):
+class CerebrusStressTool(_CerebrusTool):
     name: str = "cerebrus_stress"
     description: str = (
         "Get market stress index from cross-chain arbitrage detection across 8 chains. "
         "Returns stress level (LOW/MODERATE/HIGH/EXTREME), score, spread statistics, "
-        "and chain routes with price dislocations. Cost: $0.015 USDC via x402."
+        "and chain routes with price dislocations. " + _cost("stress")
     )
     args_schema: type[BaseModel] = StressInput
 
     def _run(self, limit: int = 10) -> str:
         try:
-            result = _get_client().stress(limit)
+            result = self._api().stress(limit)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusCexDexTool(BaseTool):
+class CerebrusCexDexTool(_CerebrusTool):
     name: str = "cerebrus_cex_dex"
     description: str = (
         "Get CEX-DEX price divergence for a token. Compares Coinbase vs "
-        "Chainlink/Uniswap prices. Returns spread in bps and direction. "
-        "Cost: $0.02 USDC via x402."
+        "Chainlink/Uniswap prices. Returns spread in bps and direction. " + _cost("cex_dex")
     )
     args_schema: type[BaseModel] = CoinInput
 
     def _run(self, coin: str) -> str:
         try:
-            result = _get_client().cex_dex(coin)
+            result = self._api().cex_dex(coin)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusBasisTool(BaseTool):
+class CerebrusBasisTool(_CerebrusTool):
     name: str = "cerebrus_basis"
     description: str = (
         "Get Chainlink basis analysis — Hyperliquid perp oracle vs Chainlink spot. "
-        "Returns basis in bps, direction, and contrarian signal. "
-        "Cost: $0.02 USDC via x402."
+        "Returns basis in bps, direction, and contrarian signal. " + _cost("basis")
     )
     args_schema: type[BaseModel] = CoinInput
 
     def _run(self, coin: str) -> str:
         try:
-            result = _get_client().basis(coin)
+            result = self._api().basis(coin)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusDepegTool(BaseTool):
+class CerebrusDepegTool(_CerebrusTool):
     name: str = "cerebrus_depeg"
     description: str = (
         "Get USDC collateral health via Chainlink oracle. "
         "Reports peg status, deviation, risk level, and Arbitrum sequencer status. "
-        "Cost: $0.01 USDC via x402."
+        + _cost("depeg")
     )
 
     def _run(self) -> str:
         try:
-            result = _get_client().depeg()
+            result = self._api().depeg()
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
 
 
-class CerebrusLiquidationsTool(BaseTool):
+class CerebrusLiquidationsTool(_CerebrusTool):
     name: str = "cerebrus_liquidations"
     description: str = (
         "Get estimated liquidation heatmap for a Hyperliquid perpetual. "
         "Maps liquidation clusters across leverage tiers (3x-50x) for longs and shorts. "
         "Returns cascade risk, estimated USD at each zone, and nearest cluster. "
-        "Cost: $0.03 USDC via x402."
+        + _cost("liquidations")
     )
     args_schema: type[BaseModel] = CoinInput
 
     def _run(self, coin: str) -> str:
         try:
-            result = _get_client().liquidations(coin)
+            result = self._api().liquidations(coin)
             return json.dumps(result.raw, indent=2)
         except CerebrusPulseError as e:
-            return json.dumps({"error": str(e)})
+            return _error(e)
